@@ -1,13 +1,14 @@
 // №5 Передача от одного всем (broadcast)
 
 #include <iostream>
+#include <cmath>
 #include "mpi.h"
 
-void MPI_Broadcast(void *buf, int count, MPI_Datatype type, int root,
-                   MPI_Comm comm);
+void MPI_Broadcast(void *buf, int count, MPI_Datatype type, int root, MPI_Comm comm);  // Tree
 
-void MPI_Broadcast0(void *buf, int count, MPI_Datatype type, int root,
-                    MPI_Comm comm);
+void MPI_Broadcast0(void *buf, int count, MPI_Datatype type, int root, MPI_Comm comm);  // Not tree
+
+int bit(int x);  // Finding the high bit position
 
 int main(int argc, char* argv[]) {
     int ProcRank, ProcNum;
@@ -23,19 +24,16 @@ int main(int argc, char* argv[]) {
         else if (procRoot >= ProcNum) procRoot = ProcNum - 1;
     }
 
-    //MPI_Bcast(&procRoot, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Broadcast0(&procRoot, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Broadcast(&procRoot, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (ProcRank == procRoot) {
         size = (argc == 3) ? atoi(argv[2]) : 10;
         std::cout << "Process " << procRoot << " broadcasting data " 
             << size << std::endl;
-        //MPI_Bcast(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
-        MPI_Broadcast0(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
+        MPI_Broadcast(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
     }
     else {
-        //MPI_Bcast(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
-        MPI_Broadcast0(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
+        MPI_Broadcast(&size, 1, MPI_INT, procRoot, MPI_COMM_WORLD);
         std::cout << "Process " << ProcRank << " received data " << size
             << " from process " << procRoot << std::endl;
     }
@@ -44,15 +42,24 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// Tree
 void MPI_Broadcast(void *buf, int count, MPI_Datatype type, int root,
                    MPI_Comm comm) {
+    int ProcRank, ProcNum;
+    MPI_Comm_rank(comm, &ProcRank);
+    MPI_Comm_size(comm, &ProcNum);
+    int procGen = bit(ProcRank);
 
+    if (ProcRank != root)
+        MPI_Recv(buf, count, type, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, MPI_STATUS_IGNORE);
+
+    for (int i = procGen; i < bit(ProcNum - 1); i++) {
+        if (ProcRank + pow(2, i) >= ProcNum)
+            break;
+        MPI_Send(buf, count, type, ProcRank + pow(2, i), 0, comm);
+    }
 }
 
-// Not tree
-void MPI_Broadcast0(void *buf, int count, MPI_Datatype type, int root,
-    MPI_Comm comm) {
+void MPI_Broadcast0(void *buf, int count, MPI_Datatype type, int root, MPI_Comm comm) {
     int ProcRank, ProcNum;
     MPI_Comm_rank(comm, &ProcRank);
     MPI_Comm_size(comm, &ProcNum);
@@ -64,4 +71,13 @@ void MPI_Broadcast0(void *buf, int count, MPI_Datatype type, int root,
     }
     else
         MPI_Recv(buf, count, type, root, MPI_ANY_TAG, comm, MPI_STATUS_IGNORE);
+}
+
+int bit(int x) {
+    int pos = 0;
+    while (x != 0) {
+        x >>= 1;
+        pos++;
+    }
+    return pos;
 }
